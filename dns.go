@@ -1,25 +1,20 @@
 package main
 
 import (
+	"bytes"
+	"encoding/binary"
 	"fmt"
-	"strings"
 )
 
 const (
 	RR_TYPE_HOST_ADDRESS = 1
 	RR_CLASS_IN          = 1
+	FLAGS_RD             = 1 << 8
 )
 
 type dnsHeader struct {
 	id      uint16
-	qr      uint8
-	opCode  uint8
-	aa      uint8
-	tc      uint8
-	rd      uint8
-	ra      uint8
-	z       uint8
-	rCode   uint8
+	flags   uint16
 	qdCount uint16
 	anCount uint16
 	nsCount uint16
@@ -27,7 +22,7 @@ type dnsHeader struct {
 }
 
 type dnsQuestion struct {
-	name  []byte
+	name  []uint8
 	qType uint16
 	class uint16
 }
@@ -56,52 +51,25 @@ type dnsMessage struct {
 }
 
 func (m *dnsMessage) encQuestionName(host string) {
-	var stringEnc string
+	var buff bytes.Buffer
 
-	for _, s := range strings.Split(host, ".") {
-		stringEnc += fmt.Sprintf("%d%s", len(s), s)
+	for _, part := range append(bytes.Split([]byte(host), []byte(".")), []byte{}) {
+		buff.WriteByte(byte(len(part)))
+		buff.Write(part)
 	}
-	stringEnc += "0"
-
-	fmt.Println(stringEnc)
-	m.question.name = []byte(stringEnc)
-	//qType, class - TBD, hardcoded for now using constants
+	m.question.name = buff.Bytes()
+	//qType, class - hardcoded for now using constants
+	m.question.qType = RR_TYPE_HOST_ADDRESS
+	m.question.class = RR_CLASS_IN
 }
 
-func byteSliceToByteString(bSlice []byte) string {
-	var bString string
-	for _, b := range bSlice {
-		bString += fmt.Sprintf("%0b", b)
-	}
-	return bString
-}
+func (m dnsMessage) packMessageQuerryBinary() []byte {
+	var buff bytes.Buffer
+	binary.Write(&buff, binary.BigEndian, m.header)
+	binary.Write(&buff, binary.BigEndian, m.question.name[:])
+	binary.Write(&buff, binary.BigEndian, m.question.qType)
+	binary.Write(&buff, binary.BigEndian, m.question.class)
 
-func (m dnsMessage) packMessageQuerry() string {
-	msgQuerry := strings.Join([]string{
-		//2 bytes for the ID
-		fmt.Sprintf("%016b", m.header.id),
-		//2 bytes for flags
-		fmt.Sprintf("%01b", m.header.qr),
-		fmt.Sprintf("%04b", m.header.opCode),
-		fmt.Sprintf("%01b", m.header.aa),
-		fmt.Sprintf("%01b", m.header.tc),
-		fmt.Sprintf("%01b", m.header.rd),
-		fmt.Sprintf("%01b", m.header.ra),
-		fmt.Sprintf("%03b", m.header.z),
-		fmt.Sprintf("%04b", m.header.rCode),
-		//2 bytes for no. of questions,
-		//no. of resource records in the answer, authority and additional sections each
-		fmt.Sprintf("%016b", m.header.qdCount),
-		fmt.Sprintf("%016b", m.header.anCount),
-		fmt.Sprintf("%016b", m.header.arCount),
-		//encoded host name bits
-		byteSliceToByteString(m.question.name[:]),
-		//2 bytes for the query type
-		fmt.Sprintf("%016b", RR_TYPE_HOST_ADDRESS),
-		//2 bytes for the query class
-		fmt.Sprintf("%016b", RR_CLASS_IN),
-	},
-		"")
-
-	return msgQuerry
+	fmt.Printf("%s\n", fmt.Sprintf("%0x", buff.Bytes()))
+	return buff.Bytes()
 }
