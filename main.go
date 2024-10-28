@@ -8,15 +8,15 @@ import (
 
 func main() {
 	dnsMsg := dnsMessage{
-		header: dnsHeader{
-			id: 22,
+		header: DNSHeader{
+			ID: 22,
 			//set recursion desired bit
-			flags:   FLAGS_RD,
-			qdCount: 1,
+			Flags:   FLAGS_RD,
+			QDCount: 1,
 		},
 	}
 	dnsMsg.encQuestionName("dns.google.com")
-	dnsQuerry := dnsMsg.packMessageQuerryBinary()
+	dnsQuery := dnsMsg.pack()
 
 	conn, err := net.Dial("udp", "8.8.8.8:53")
 	if err != nil {
@@ -24,7 +24,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	_, err = conn.Write([]byte(dnsQuerry))
+	_, err = conn.Write([]byte(dnsQuery))
 	if err != nil {
 		fmt.Println("error sending DNS query through socket: ", err)
 		os.Exit(1)
@@ -37,5 +37,9 @@ func main() {
 		return
 	}
 
-	fmt.Printf("%0x\n", buf[:n])
+	respMsg := dnsMessage{}
+	respMsg.unpack(buf[:n])
+	fmt.Println(respMsg.header.ID, respMsg.header.Flags, respMsg.header.QDCount, respMsg.header.ANCount, respMsg.header.NSCount, respMsg.header.ARCount)
+	fmt.Println(respMsg.question)
+	fmt.Println(respMsg.answer)
 }
